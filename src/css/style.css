@@ -1,0 +1,62 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+
+/* Additional styles */
+@import "additional-styles/utility-patterns.css";
+@import "additional-styles/flatpickr.css";
+
+@import "tailwindcss/utilities";
+
+@font-face {
+  font-family: "Poppins";
+  src: url("./Poppins/Poppins-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Poppins";
+  src: url("./Poppins/Poppins-Bold.ttf") format("truetype");
+  font-weight: bold;
+  font-style: normal;
+}
+
+@keyframes wiggle {
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-10deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+  75% {
+    transform: rotate(-5deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
+.wiggle {
+  display: inline-block; /* Ensure the element can be transformed */
+}
+
+.wiggle:hover {
+  animation: wiggle 0.5s ease-in-out; /* Apply the wiggle animation on hover */
+}
+
+* {
+  font-family: "Poppins";
+}
+
+.capitalize-text {
+  text-transform: capitalize;
+  text-align: center;
+}
