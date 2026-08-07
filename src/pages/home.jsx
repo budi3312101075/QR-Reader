@@ -12,8 +12,11 @@ import {
   Trash2,
   AlertTriangle,
   PackageSearch,
+  Copy,
+  Check,
 } from "lucide-react";
 import { getBarcodeInfo } from "../utils/Utils";
+import { toBlob } from "html-to-image";
 
 const TYPE_STYLES = {
   QR_CODE: "text-cyan-300 border-cyan-300/40 bg-cyan-300/10",
@@ -27,6 +30,7 @@ const TYPE_STYLES = {
 };
 
 export default function Home() {
+  const cardRef = useRef(null);
   const videoRef = useRef(null);
   const readerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -35,6 +39,7 @@ export default function Home() {
   const [devices, setDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [lastResult, setLastResult] = useState(null);
+  const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState([]);
   const [error, setError] = useState("");
 
@@ -85,6 +90,24 @@ export default function Home() {
 
     setLastResult(result);
     setHistory((prev) => [result, ...prev].slice(0, 20));
+  }, []);
+
+  const copyCardAsImage = useCallback(async () => {
+    if (!cardRef.current) return;
+    try {
+      const blob = await toBlob(cardRef.current, {
+        pixelRatio: 2,
+        backgroundColor: "#F0EBDD",
+        cacheBust: true,
+      });
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob }),
+      ]);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      setError("Gagal copy card sebagai gambar.");
+    }
   }, []);
 
   const startScan = useCallback(() => {
@@ -176,14 +199,12 @@ export default function Home() {
       {/* Header */}
       <div className="mb-5">
         <p className="font-scan-mono text-[10px] tracking-[0.25em] text-cyan-400/70 uppercase mb-1">
-          Scanline // Factory QC
+          IK Engineering // QR Model Verify
         </p>
         <h1 className="font-scan-display text-2xl sm:text-3xl font-semibold text-stone-100 uppercase tracking-tight">
           Barcode Market Identifier
         </h1>
-        <p className="text-sm text-stone-500 mt-1">
-          Arahkan kamera ke barcode/QR, atau upload gambar dari file manager.
-        </p>
+        <p className="text-sm text-stone-500 mt-1"></p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4">
@@ -333,61 +354,93 @@ export default function Home() {
         <div>
           {lastResult ? (
             lastResult.info ? (
-              <div className="relative bg-[#F0EBDD] text-[#1C1A15] rounded-lg p-5 shadow-xl">
-                {/* strip barcode dekoratif */}
-                <div
-                  className="h-4 w-full mb-4 rounded-sm opacity-80"
-                  style={{
-                    backgroundImage:
-                      "repeating-linear-gradient(90deg, #1C1A15 0 2px, transparent 2px 5px)",
-                  }}
-                  aria-hidden="true"
-                />
-
-                {lastResult.market && (
-                  <div className="font-scan-display absolute -top-3 -right-3 rotate-[-8deg] border-2 border-[#C1442D] text-[#C1442D] bg-[#F0EBDD] px-3 py-1 rounded text-xs font-bold uppercase tracking-widest">
-                    Dest: {lastResult.market}
-                  </div>
-                )}
-
-                <div className="mb-3">
-                  <span
-                    className={`inline-block px-2 py-0.5 rounded border text-[11px] font-scan-mono ${
-                      TYPE_STYLES[lastResult.format] ||
-                      "text-stone-700 border-stone-400 bg-stone-200"
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-scan-mono text-[10px] tracking-[0.2em] text-stone-500 uppercase">
+                    Result Card
+                  </p>
+                  <button
+                    onClick={copyCardAsImage}
+                    disabled={copied}
+                    className={`flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 ${
+                      copied
+                        ? "border-emerald-400/40 text-emerald-300 bg-emerald-400/10"
+                        : "border-white/15 text-stone-300 hover:bg-white/5"
                     }`}
                   >
-                    {lastResult.format}
-                  </span>
+                    {copied ? (
+                      <>
+                        <Check size={14} /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={14} /> Copy as Image
+                      </>
+                    )}
+                  </button>
                 </div>
 
-                <dl className="font-scan-mono text-sm space-y-2">
-                  <div className="flex justify-between gap-2 border-b border-dotted border-[#1C1A15]/30 pb-1">
-                    <dt className="text-[#1C1A15]/60">Type</dt>
-                    <dd className="text-right">{lastResult.info.name}</dd>
+                <div
+                  ref={cardRef}
+                  className="relative bg-[#F0EBDD] text-[#1C1A15] rounded-lg p-5 shadow-xl"
+                >
+                  {/* strip barcode dekoratif */}
+                  <div
+                    className="h-4 w-full mb-4 rounded-sm opacity-80"
+                    style={{
+                      backgroundImage:
+                        "repeating-linear-gradient(90deg, #1C1A15 0 2px, transparent 2px 5px)",
+                    }}
+                    aria-hidden="true"
+                  />
+
+                  {lastResult.market && (
+                    <div className="font-scan-display absolute -top-3 -right-3 rotate-[-8deg] border-2 border-[#C1442D] text-[#C1442D] bg-[#F0EBDD] px-3 py-1 rounded text-xs font-bold uppercase tracking-widest">
+                      Dest: {lastResult.market}
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded border text-[11px] font-scan-mono ${
+                        TYPE_STYLES[lastResult.format] ||
+                        "text-stone-700 border-stone-400 bg-stone-200"
+                      }`}
+                    >
+                      {lastResult.format}
+                    </span>
                   </div>
-                  <div className="flex justify-between gap-2 border-b border-dotted border-[#1C1A15]/30 pb-1">
-                    <dt className="text-[#1C1A15]/60">Reference</dt>
-                    <dd className="text-right">{lastResult.info.reference}</dd>
-                  </div>
-                  <div className="border-b border-dotted border-[#1C1A15]/30 pb-1">
-                    <dt className="text-[#1C1A15]/60 mb-1">Usage</dt>
-                    <dd>
-                      <ul className="list-disc list-inside space-y-0.5">
-                        {lastResult.info.usage.map((u, i) => (
-                          <li key={i}>{u}</li>
-                        ))}
-                      </ul>
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-2 pt-1 text-xs">
-                    <dt>Value Scan</dt>
-                    <dd className="text-right break-all text-red-600">
-                      {lastResult.rawValue}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
+
+                  <dl className="font-scan-mono text-sm space-y-2">
+                    <div className="flex justify-between gap-2 border-b border-dotted border-[#1C1A15]/30 pb-1">
+                      <dt className="text-[#1C1A15]/60">Type</dt>
+                      <dd className="text-right">{lastResult.info.name}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2 border-b border-dotted border-[#1C1A15]/30 pb-1">
+                      <dt className="text-[#1C1A15]/60">Reference</dt>
+                      <dd className="text-right">
+                        {lastResult.info.reference}
+                      </dd>
+                    </div>
+                    <div className="border-b border-dotted border-[#1C1A15]/30 pb-1">
+                      <dt className="text-[#1C1A15]/60 mb-1">Usage</dt>
+                      <dd>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {lastResult.info.usage.map((u, i) => (
+                            <li key={i}>{u}</li>
+                          ))}
+                        </ul>
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2 pt-1 text-xs">
+                      <dt>Value Scan</dt>
+                      <dd className="text-right break-all text-red-600">
+                        {lastResult.rawValue}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </>
             ) : (
               <div className="bg-[#12161A] border border-amber-400/30 rounded-2xl p-5 text-sm text-amber-200">
                 <p className="font-scan-mono text-xs uppercase tracking-widest mb-1 text-amber-400/70">
