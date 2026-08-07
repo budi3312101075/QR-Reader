@@ -14,7 +14,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico"],
       manifest: {
-        name: "Barcode Market Identifier",
+        name: "QR Model Verify",
         short_name: "Scanline",
         description: "Deteksi barcode/QR untuk QC factory",
         theme_color: "#0E1113",
