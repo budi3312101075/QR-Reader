@@ -29,6 +29,17 @@ const TYPE_STYLES = {
   DATA_MATRIX: "text-red-300 border-red-300/40 bg-red-300/10 font-bold",
 };
 
+const TYPE_OPTIONS = [
+  { value: "QR_CODE", label: "QR Code" },
+  { value: "EAN_13", label: "EAN-13" },
+  { value: "JAN_CODE", label: "JAN Code (Japan)" },
+  { value: "UPC_A", label: "UPC-A" },
+  { value: "CODE_39", label: "Code 39" },
+  { value: "CODE_128", label: "Code 128" },
+  { value: "CODABAR", label: "Codabar" },
+  { value: "DATA_MATRIX", label: "Data Matrix" },
+];
+
 export default function Home() {
   const cardRef = useRef(null);
   const videoRef = useRef(null);
@@ -38,6 +49,9 @@ export default function Home() {
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [expectedType, setExpectedType] = useState("");
+  const [compareValue, setCompareValue] = useState(false); // checkbox aktif/nggak
+  const [expectedValue, setExpectedValue] = useState(""); // value manual buat dibandingin
   const [lastResult, setLastResult] = useState(null);
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState([]);
@@ -77,14 +91,55 @@ export default function Home() {
     };
   }, []);
 
+  // ref buat hindari stale closure di decode loop
+  const expectedTypeRef = useRef("");
+  const compareValueRef = useRef(false);
+  const expectedValueRef = useRef("");
+
+  useEffect(() => {
+    expectedTypeRef.current = expectedType;
+  }, [expectedType]);
+
+  useEffect(() => {
+    compareValueRef.current = compareValue;
+  }, [compareValue]);
+
+  useEffect(() => {
+    expectedValueRef.current = expectedValue;
+  }, [expectedValue]);
+
   const handleDecoded = useCallback((rawFormat, value) => {
     const { resolvedType, info, market } = getBarcodeInfo(rawFormat, value);
+
+    // baca dari ref -> selalu up-to-date walau lagi jalan decode loop
+    const currentExpectedType = expectedTypeRef.current;
+    const currentCompareValue = compareValueRef.current;
+    const currentExpectedValue = expectedValueRef.current;
+
+    const typeMatch = currentExpectedType
+      ? resolvedType === currentExpectedType
+      : null;
+    const valueMatch = currentCompareValue
+      ? value === currentExpectedValue
+      : null;
+
+    let judgement = null;
+    if (currentExpectedType) {
+      judgement =
+        typeMatch && (!currentCompareValue || valueMatch) ? "PASS" : "NG";
+    }
 
     const result = {
       format: resolvedType,
       rawValue: value,
       info,
       market,
+      expectedType: currentExpectedType,
+      compareValue: currentCompareValue,
+      expectedValue: currentExpectedValue,
+      typeMatch,
+      valueMatch,
+      judgement,
       scannedAt: new Date().toLocaleTimeString(),
     };
 
@@ -112,6 +167,16 @@ export default function Home() {
 
   const startScan = useCallback(() => {
     if (!selectedDeviceId || !readerRef.current) return;
+    if (!expectedTypeRef.current) {
+      setError("Pilih tipe barcode yang diharapkan dulu sebelum scan.");
+      return;
+    }
+    if (compareValueRef.current && !expectedValueRef.current.trim()) {
+      setError(
+        "Compare Value aktif tapi value-nya kosong. Isi dulu atau uncheck.",
+      );
+      return;
+    }
     setError("");
     setIsScanning(true);
 
@@ -143,6 +208,19 @@ export default function Home() {
       const file = e.target.files?.[0];
       if (!file) return;
 
+      if (!expectedType) {
+        setError("Pilih tipe barcode yang diharapkan dulu sebelum upload.");
+        e.target.value = "";
+        return;
+      }
+      if (compareValue && !expectedValue.trim()) {
+        setError(
+          "Compare Value aktif tapi value-nya kosong. Isi dulu atau uncheck.",
+        );
+        e.target.value = "";
+        return;
+      }
+
       if (isScanning) stopScan();
 
       setError("");
@@ -168,13 +246,25 @@ export default function Home() {
           e.target.value = "";
         });
     },
-    [isScanning, stopScan, handleDecoded],
+    [
+      isScanning,
+      stopScan,
+      handleDecoded,
+      expectedType,
+      compareValue,
+      expectedValue,
+    ],
   );
 
   const clearHistory = () => {
     setHistory([]);
     setLastResult(null);
   };
+
+  const scanDisabled =
+    !selectedDeviceId ||
+    !expectedType ||
+    (compareValue && !expectedValue.trim());
 
   return (
     <div className="h-screen w-screen bg-white">
@@ -236,9 +326,55 @@ export default function Home() {
               )}
             </div>
 
-            {/* Controls */}
+            {/* Tipe diharapkan + compare value */}
             <div className="flex flex-wrap items-center gap-2 mt-4">
-              <h1 className="text-white">Select Camera : </h1>
+              <h1 className="text-white text-sm shrink-0">Select Type :</h1>
+              <select
+                className={`bg-[#0E1113] border text-sm rounded-lg px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 ${
+                  expectedType
+                    ? "border-white/10 text-stone-200"
+                    : "border-amber-400/60 text-amber-300"
+                }`}
+                value={expectedType}
+                onChange={(e) => setExpectedType(e.target.value)}
+              >
+                <option value="">-- Pilih Tipe --</option>
+                {TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              <label className="flex items-center gap-1.5 text-xs text-stone-400 select-none cursor-pointer ml-1">
+                <input
+                  type="checkbox"
+                  checked={compareValue}
+                  onChange={(e) => setCompareValue(e.target.checked)}
+                  className="accent-cyan-400 w-3.5 h-3.5"
+                />
+                Compare Value
+              </label>
+
+              <input
+                type="text"
+                placeholder="Value yang diharapkan..."
+                value={expectedValue}
+                onChange={(e) => setExpectedValue(e.target.value)}
+                disabled={!compareValue}
+                className={`flex-1 min-w-[160px] bg-[#0E1113] border text-sm rounded-lg px-3 py-2 font-scan-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 disabled:opacity-30 disabled:cursor-not-allowed ${
+                  compareValue
+                    ? expectedValue.trim()
+                      ? "border-white/10 text-stone-200"
+                      : "border-amber-400/60 text-amber-300"
+                    : "border-white/10 text-stone-500"
+                }`}
+              />
+            </div>
+
+            {/* Controls */}
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <h1 className="text-white text-sm">Select Camera : </h1>
               <select
                 className="bg-[#0E1113] border border-white/10 text-stone-200 text-sm rounded-lg px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 disabled:opacity-40"
                 value={selectedDeviceId}
@@ -259,7 +395,7 @@ export default function Home() {
                 <button
                   className="flex items-center gap-2 bg-cyan-400 text-[#0E1113] font-semibold text-sm px-4 py-2 rounded-lg hover:bg-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 disabled:opacity-40"
                   onClick={startScan}
-                  disabled={!selectedDeviceId}
+                  disabled={scanDisabled}
                 >
                   <Video size={16} /> Mulai Scan
                 </button>
@@ -280,8 +416,9 @@ export default function Home() {
                 className="hidden"
               />
               <button
-                className="flex items-center gap-2 border border-white/15 text-stone-300 text-sm px-4 py-2 rounded-lg hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+                className="flex items-center gap-2 border border-white/15 text-stone-300 text-sm px-4 py-2 rounded-lg hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 disabled:opacity-40"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={scanDisabled}
               >
                 <Upload size={16} /> Upload Gambar
               </button>
@@ -330,6 +467,17 @@ export default function Home() {
                       <span className="text-stone-500 shrink-0">
                         {h.market || "—"}
                       </span>
+                      {h.judgement && (
+                        <span
+                          className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            h.judgement === "PASS"
+                              ? "text-emerald-400 bg-emerald-400/10"
+                              : "text-red-400 bg-red-400/10"
+                          }`}
+                        >
+                          {h.judgement}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -369,7 +517,7 @@ export default function Home() {
 
                   <div
                     ref={cardRef}
-                    className="relative bg-[#F0EBDD] text-[#1C1A15] rounded-lg p-5 shadow-xl"
+                    className="relative bg-[#F0EBDD] text-[#1C1A15] rounded-lg p-5 shadow-xl overflow-hidden"
                   >
                     {/* strip barcode dekoratif */}
                     <div
@@ -381,13 +529,23 @@ export default function Home() {
                       aria-hidden="true"
                     />
 
-                    {lastResult.market && (
-                      <div className="font-scan-display absolute top-4 right-4 border-2 border-[#C1442D] text-[#C1442D] bg-[#F0EBDD] px-3 py-1 rounded text-xs font-bold uppercase tracking-widest">
-                        Dest: {lastResult.market}
+                    {/* Stempel PASS / NG — verdict utama */}
+                    {lastResult.judgement && (
+                      <div
+                        className={`font-scan-display absolute top-4 left-4 rotate-[-10deg] border-4 px-4 py-1.5 rounded text-2xl font-extrabold uppercase tracking-widest ${
+                          lastResult.judgement === "PASS"
+                            ? "border-[#2F7D4F] text-[#2F7D4F]"
+                            : "border-[#B3261E] text-[#B3261E]"
+                        }`}
+                        style={{ opacity: 0.9 }}
+                      >
+                        {lastResult.judgement}
                       </div>
                     )}
 
-                    <div className="mb-3">
+                    <div
+                      className={lastResult.judgement ? "mt-14 mb-3" : "mb-3"}
+                    >
                       <span
                         className={`inline-block px-2 py-0.5 rounded border text-[11px] font-scan-mono ${
                           TYPE_STYLES[lastResult.format] ||
@@ -399,16 +557,43 @@ export default function Home() {
                     </div>
 
                     <dl className="font-scan-mono text-sm space-y-2">
+                      {lastResult.expectedType && (
+                        <div className="flex justify-between gap-2 border-b border-dotted border-[#1C1A15]/30 pb-1">
+                          <dt className="text-[#1C1A15]/60">Expected Type</dt>
+                          <dd
+                            className={`text-right ${
+                              lastResult.typeMatch === false
+                                ? "text-red-600 font-bold"
+                                : ""
+                            }`}
+                          >
+                            {TYPE_OPTIONS.find(
+                              (o) => o.value === lastResult.expectedType,
+                            )?.label || lastResult.expectedType}
+                          </dd>
+                        </div>
+                      )}
+
+                      {lastResult.compareValue && (
+                        <div className="flex justify-between gap-2 border-b border-dotted border-[#1C1A15]/30 pb-1">
+                          <dt className="text-[#1C1A15]/60">Expected Value</dt>
+                          <dd
+                            className={`text-right break-all ${
+                              lastResult.valueMatch === false
+                                ? "text-red-600 font-bold"
+                                : "text-emerald-700"
+                            }`}
+                          >
+                            {lastResult.expectedValue}
+                          </dd>
+                        </div>
+                      )}
+
                       <div className="flex justify-between gap-2 border-b border-dotted border-[#1C1A15]/30 pb-1">
                         <dt className="text-[#1C1A15]/60">Type</dt>
                         <dd className="text-right">{lastResult.info.name}</dd>
                       </div>
-                      <div className="flex justify-between gap-2 border-b border-dotted border-[#1C1A15]/30 pb-1">
-                        <dt className="text-[#1C1A15]/60">Reference</dt>
-                        <dd className="text-right">
-                          {lastResult.info.reference}
-                        </dd>
-                      </div>
+
                       <div className="border-b border-dotted border-[#1C1A15]/30 pb-1">
                         <dt className="text-[#1C1A15]/60 mb-1">Usage</dt>
                         <dd>
@@ -421,7 +606,13 @@ export default function Home() {
                       </div>
                       <div className="flex justify-between gap-2 pt-1 text-xs">
                         <dt>Value Scan</dt>
-                        <dd className="text-right break-all text-red-600">
+                        <dd
+                          className={`text-right break-all ${
+                            lastResult.valueMatch === false
+                              ? "text-red-600 font-bold"
+                              : "text-red-600"
+                          }`}
+                        >
                           {lastResult.rawValue}
                         </dd>
                       </div>
@@ -435,6 +626,17 @@ export default function Home() {
                   </p>
                   Format <b>{lastResult.format}</b> terdeteksi, tapi belum ada
                   di tabel referensi.
+                  {lastResult.judgement && (
+                    <p
+                      className={`font-bold mt-2 ${
+                        lastResult.judgement === "PASS"
+                          ? "text-emerald-400"
+                          : "text-red-400"
+                      }`}
+                    >
+                      {lastResult.judgement}
+                    </p>
+                  )}
                   <p className="text-stone-500 text-xs mt-2 break-all font-scan-mono">
                     {lastResult.rawValue}
                   </p>
